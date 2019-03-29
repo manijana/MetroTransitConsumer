@@ -118,4 +118,4 @@ In case of change the existing code, you may require following tools,
 
 #### The fine print
 
-Only tested with Mozilla Firefox browsers
+Only tested with Mozilla Firefox browser.

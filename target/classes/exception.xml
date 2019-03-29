@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd 
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	
+	<!-- To handle all kind of errors and exceptions. End of this block we are invoking ServiceResponse flow will send a response back to client. -->
+    <choice-exception-strategy name="exceptionChoice_Exception_Strategy">
+        <catch-exception-strategy when="#[exception.causedBy(org.mule.module.http.internal.request.ResponseValidatorException)]" doc:name="Catch Exception Strategy">
+            <logger message="There was an exception : ResponseValidatorException and Details : #[exception]" level="ERROR" doc:name="Logger"/>
+            <scripting:component doc:name="Groovy">
+				<scripting:script engine="Groovy"><![CDATA[
+        			flowVars.response.put("Message", "ResponseValidatorException : "+exception)
+				]]></scripting:script>
+			</scripting:component>
+			<flow-ref name="ServiceResponse_Flow" doc:name="ServiceResponse_Flow"/>
+        </catch-exception-strategy>
+        <catch-exception-strategy when="#[exception.causedBy(org.mule.api.MessagingException)]" doc:name="Catch Exception Strategy">
+       		<logger message="There was an exception : MessagingException and Details : #[exception]" level="ERROR" doc:name="Logger"/>
+       		<choice doc:name="Choice - Decide which exception need to handle">
+         		<when expression="#[exception.causedBy(java.util.concurrent.TimeoutException)]">
+         			<logger message="There was an timeout error while access Metro Transit Service and exception is : #[exception]" level="ERROR" doc:name="Logger"/>
+         			<scripting:component doc:name="Groovy">
+						<scripting:script engine="Groovy"><![CDATA[
+		        			flowVars.response.put("Message", "TimeoutException : "+exception)
+						]]></scripting:script>
+					</scripting:component>
+					<flow-ref name="ServiceResponse_Flow" doc:name="ServiceResponse_Flow"/>
+         		</when>
+         		<when expression="#[exception.causedBy(java.nio.channels.UnresolvedAddressException)]">
+         			<logger message="There was an timeout error while access Metro Transit Service and exception is : #[exception]" level="ERROR" doc:name="Logger"/>
+         			<scripting:component doc:name="Groovy">
+						<scripting:script engine="Groovy"><![CDATA[
+		        			flowVars.response.put("Message", "UnresolvedAddressException : "+exception)
+						]]></scripting:script>
+					</scripting:component>
+					<flow-ref name="ServiceResponse_Flow" doc:name="ServiceResponse_Flow"/>
+         		</when>
+	        	<otherwise>
+	                <logger message="There was an unknown error while access Metro Transit Service and exception is : #[exception]" level="ERROR" doc:name="Logger"/>
+	                <scripting:component doc:name="Groovy">
+						<scripting:script engine="Groovy"><![CDATA[
+		        			flowVars.response.put("Message", "UnknownError : "+exception)
+						]]></scripting:script>
+					</scripting:component>
+					<flow-ref name="ServiceResponse_Flow" doc:name="ServiceResponse_Flow"/>
+	            </otherwise>
+         	</choice>
+        </catch-exception-strategy>
+    </choice-exception-strategy>
+</mule>

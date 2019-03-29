@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:context="http://www.springframework.org/schema/context" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd">
+    
+    <!-- 
+    	To load dynamic properties for production deployment.
+    	Here, 
+    		we can't use property place holder like metro.transit.${mule.env}.properties. Since the Mule Standalone server will throw an error while deploy it.
+    		So, we can test this in Anypoint Studio locally.	
+    -->
+    <context:property-placeholder location="metro.transit.dev.properties"/>
+    
+    <!-- HTTP REST Listener -->
+    <http:listener-config name="HTTP_Listener_Configuration" host="${metro.transit.next.bus.url}" port="${metro.transit.next.bus.port}" 
+    		basePath="/${metro.transit.base.path}" doc:name="HTTP Listener Configuration"/>
+    
+    <!-- HTTP REST Requester -->
+    <http:request-config name="HTTP_Request_Configuration" host="${metro.tarnsit.url}" basePath="/" port="${metro.tarnsit.port}" 
+    		doc:name="HTTP Request Configuration"/>
+    
+    <!-- Spring Bean initialization to invoke Java method -->
+    <spring:beans>
+        <spring:bean name="helper" class="com.metro.transit.consumer.helper.HelpProvider" />
+    </spring:beans>
+    
+    <flow name="MetroTransitConsumer_Flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/${metro.transit.next.bus.service.base.path}" allowedMethods="POST" doc:name="HTTP"/>
+        <logger message="*************** Mule MAIN flow started at : #[server.dateTime] ***************" level="INFO" doc:name="Logger Flow Starts"/>
+        
+        <!-- Fetch JSON Request from POST method and assigned in some variables.  -->
+        <set-variable variableName="busRouteName" value="#[json:BUS_ROUTE]" doc:name="Fetch Bus Route From JSON Request"/>
+        <set-variable variableName="busStopName" value="#[json:BUS_STOP_NAME]" doc:name="Fetch Bus Stop From JSON Request"/>
+        <set-variable variableName="direction" value="#[json:DIRECTION]" doc:name="Fetch Direction From JSON Request"/>
+        
+        <!-- Invoke DefaultValues flow and assign it in variable -->
+        <flow-ref name="DefaultValues_Flow" doc:name="DefaultValues_Flow"/>
+        
+        <!-- Fetch response format if any(Valid formats are json and xml. Otherthan these two, the service will respond a plain text) -->
+        <expression-component doc:name="Response Format">
+        	<![CDATA[flowVars.responseFormat = (message.inboundProperties.'http.query.params'.format == null) ? sessionVars.RESPONSE_FORMAT : message.inboundProperties.'http.query.params'.format;]]>
+        </expression-component>
+        
+        <!-- 
+        	Check any parameters not available(i.e, not getting from Request), assign empty instead of null value that to avoid future problem. 
+        -->
+        <scripting:component doc:name="Groovy">
+			<scripting:script engine="Groovy"><![CDATA[
+				if(flowVars.busRouteName == null)
+					flowVars.busRouteName = "";
+				if(flowVars.busStopName == null)
+					flowVars.busStopName = "";
+				if(flowVars.direction == null)
+					flowVars.direction = "";
+			]]></scripting:script>
+		</scripting:component>
+        
+        <!-- 
+        	Check Route data already loaded into storage(Memory/DB/..etc). My assumption, it will not change easily. 
+        	If not loaded(first request), the process will load it in storage for current and future use. 
+        -->
+        <invoke name="CheckRoutesDataExistInStorage" object-ref="helper" method="checkRoutesLoaded" doc:name="Java Invokde Component"/>
+        <choice doc:name="Choice">
+            <when expression="#[message.payload == 'NO']">
+            	<logger level="INFO" message="Load Route Datas into Storage for the very first time." doc:name="Logger" />
+                <flow-ref name="LoadRoutes_Flow" doc:name="LoadRoutes_Flow"/>
+            </when>
+            <otherwise>
+                <logger level="INFO" message="No action required, Since Route information already loaded into Storage." doc:name="Logger" />
+            </otherwise>
+        </choice>
+        
+        <flow-ref name="RetrieveDirection_Flow" doc:name="RetrieveDirection_Flow"/>
+        <flow-ref name="RetrieveRoute_Flow" doc:name="RetrieveRoute_Flow"/>
+        <flow-ref name="RetrieveStop_Flow" doc:name="RetrieveStop_Flow"/>
+        
+        <logger message="Given BusRoute : #[flowVars.busRouteName] (Id - #[flowVars.routeId]) , BusStop : #[flowVars.busStopName] (Id - #[flowVars.stopId]) , 
+        		Direction : #[flowVars.direction] (Id - #[flowVars.directionId]) and Response Format : #[flowVars.responseFormat]" level="INFO" doc:name="Logger"/>
+        
+        <choice doc:name="Check All Values are available">
+            <when expression="#[flowVars.routeId != '' &amp;&amp; flowVars.stopId != '' &amp;&amp; flowVars.directionId != '']">
+                <logger level="INFO" message="All three parameters are avail/valid. So, proceed to find next bus time for the current route." doc:name="Logger"/>
+                <flow-ref name="FindNextBus_Flow" doc:name="FindNextBus_Flow"/>
+                <scripting:component doc:name="Groovy">
+                    <scripting:script engine="Groovy"><![CDATA[
+                    if(flowVars.nextBusTime != '') {
+                    	flowVars.response.put("NextBus", flowVars.nextBusTime)
+                    }
+					]]></scripting:script>
+                </scripting:component>
+            </when>
+            <otherwise>
+                <logger level="INFO" message="$$$$$$$$$$$$$$$$$$$$$ #[flowVars.errorMessage] $$$$$$$$$$$$$$$$$$$$$"  doc:name="Logger"/>
+                <flow-ref name="ServiceErrorResponse_Flow" doc:name="ServiceErrorResponse_Flow"/>
+            </otherwise>
+        </choice>
+        <flow-ref name="ServiceResponse_Flow" doc:name="ServiceResponse_Flow"/>
+        
+        <exception-strategy ref="exceptionChoice_Exception_Strategy" doc:name="Reference Exception Strategy"/>
+        
+    </flow>
+    
+    <!-- 
+    	This flow will set error messages, if any 
+    -->
+    <sub-flow name="ServiceErrorResponse_Flow">
+    	<scripting:component doc:name="Groovy">
+		<scripting:script engine="Groovy"><![CDATA[
+        	flowVars.response.put("Message", flowVars.errorMessage)
+		]]></scripting:script>
+		</scripting:component>
+    </sub-flow>
+    
+    <!-- 
+    	This flow is responsible to format service response based on user requirement. 
+    -->
+    <sub-flow name="ServiceResponse_Flow">
+    	<set-payload value="#[flowVars.response]" doc:name="Set Payload"/>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.responseFormat == 'xml' || flowVars.responseFormat == 'XML']">
+            	<logger level="INFO" message="Parsing response to XML as per client request." doc:name="Logger"/>
+                <mulexml:object-to-xml-transformer doc:name="Object to XML Transformer"/>
+                <set-payload value="#[payload]" mimeType="${xml.response.mime.type}" doc:name="XML Response" />
+            </when>
+            <when expression="#[flowVars.responseFormat == 'json' || flowVars.responseFormat == 'JSON']">
+            	<logger level="INFO" message="Parsing response to JSON as per client request." doc:name="Logger"/>
+                <json:object-to-json-transformer doc:name="Object to JSON Transformer"/>
+                <set-payload value="#[payload]" mimeType="${json.response.mime.type}" doc:name="JSON Response" />
+            </when>
+            <otherwise>
+                <logger level="INFO" message="NormalParsing response to Plain Text." doc:name="Logger"/>
+                <set-payload value="#[message.payloadAs(java.lang.String)]" mimeType="text/plain" doc:name="XML Response" />
+            </otherwise>
+        </choice>
+        <logger message="*************** Mule MAIN flow ends at : #[server.dateTime] ***************" level="INFO" doc:name="Logger Flow Ends"/>
+    </sub-flow>
+    
+    <!-- 
+   		Retrieve directionId by using direction name (from Java Enumerator 'Direction'). 
+   	-->
+    <sub-flow name="RetrieveDirection_Flow">
+    	<logger level="WARN" message="Inside Retrieve Direction Flow" doc:name="Logger"/>
+    	<invoke name="RetrieveDirectionId" object-ref="helper" method="getDirectionId" 
+        	methodArguments="#[flowVars.direction]" methodArgumentTypes="java.lang.String" doc:name="Java Invokde Component"/>
+        <expression-component doc:name="Update DirectionId"><![CDATA[flowVars.directionId = message.payload;]]></expression-component>
+    </sub-flow>
+    
+    <!-- 
+    	Retrieve routeId by using directionId from Storage system. i.e, Database, In-memory, file-system,.. etc. 
+    -->
+    <sub-flow name="RetrieveRoute_Flow">
+    	<logger level="WARN" message="Inside Retrieve Route Flow. Expected DirectionId : #[flowVars.directionId]" doc:name="Logger" />
+    	<choice doc:name="Choice">
+            <when expression="#[message.directionId != '']">
+            	<invoke name="RetrieveRouteId" object-ref="helper" method="getRouteId" 
+		        	methodArguments="#[flowVars.busRouteName]" methodArgumentTypes="java.lang.String" doc:name="Java Invokde Component"/>
+		        <expression-component doc:name="Update RouteId"><![CDATA[flowVars.routeId = message.payload;]]></expression-component>
+            </when>
+            <otherwise>
+                <logger level="INFO" doc:name="Logger" message="Not required to retrieve RouteId. Since direction invalid/missing."/>
+            </otherwise>
+        </choice>
+    </sub-flow>
+    
+    <!-- 
+    	This flow will responsible to load route information into storage area for current/future usage. 
+    -->
+    <flow name="LoadRoutes_Flow">
+    	<http:listener config-ref="HTTP_Listener_Configuration" path="/${metro.transit.referesh.routes.path}" allowedMethods="GET" doc:name="HTTP"/>
+    	<logger level="INFO" doc:name="Logger" message="Loading/Refereshing Routes Information."/>
+        <http:request config-ref="HTTP_Request_Configuration" path="/${metro.transit.routes.base.url}" method="GET" doc:name="HTTP">
+        	<http:request-builder>
+        		<http:query-param paramName="format" value="json"/>
+        	</http:request-builder>
+        </http:request>
+        <invoke name="LoadRoutesDetails" object-ref="helper" method="loadRoutes" 
+        	methodArguments="#[message.payloadAs(java.lang.String)]" methodArgumentTypes="java.lang.String"/>
+        <exception-strategy ref="exceptionChoice_Exception_Strategy" doc:name="Reference Exception Strategy"/>
+    </flow>
+    
+    <!-- 
+    	Retrieve stopId by using routeId and directionId from Metro Transit REST Service. 
+    -->
+    <sub-flow name="RetrieveStop_Flow">
+    	<logger level="WARN" message="Inside Retrieve Stop Flow. Expected DirectionId : #[flowVars.directionId] and RouteId : #[flowVars.routeId]"  doc:name="Logger"/>
+    	<choice doc:name="Choice">
+            <when expression="#[flowVars.directionId != '' &amp;&amp; flowVars.routeId != '']">
+            	<http:request config-ref="HTTP_Request_Configuration" path="/${metro.transit.stops.base.url}" method="GET" doc:name="HTTP">
+            		<http:request-builder>
+        				<http:query-param paramName="format" value="json"/>
+        			</http:request-builder>
+            	</http:request>
+		        <!-- Retrieve Bus departure time by given route, direction and target. -->
+		        <invoke name="GetBusDetails" object-ref="helper" method="getBusId" 
+		        	methodArguments="#[message.payloadAs(java.lang.String)],#[flowVars.busStopName]" methodArgumentTypes="java.lang.String,java.lang.String" doc:name="Java Invokde Component"/>
+		        <expression-component doc:name="Update StopId"><![CDATA[flowVars.stopId = message.payload;]]></expression-component>
+            </when>
+            <otherwise>
+                <logger level="INFO" message="Not required to retrieve busId. Since either or both direction/current route is invalid/missing." doc:name="Logger" />
+            </otherwise>
+        </choice>
+    </sub-flow>
+    
+    <!-- 
+   		This flow will responsible to retrieve busId for the given route and directionId. 
+   	-->
+    <sub-flow name="FindNextBus_Flow">
+        <logger level="INFO" message="Find next bus flow starts : REST URI = ${metro.tarnsit.url}/${metro.transit.timepoint.departures.base.url}?format=json" doc:name="Logger"/>
+		<http:request config-ref="HTTP_Request_Configuration" path="/${metro.transit.timepoint.departures.base.url}?format=json" method="GET" doc:name="HTTP" />
+        <invoke name="RetrieveNextBusTime" object-ref="helper" method="getNextBusTime"  methodArguments="#[message.payloadAs(java.lang.String)]" methodArgumentTypes="java.lang.String"/>
+        <set-variable variableName="nextBusTime" value="#[message.payload]" doc:name="Assign Bus Id"/>
+        <logger message="Next bus departure time : #[nextBusTime]" level="INFO" doc:name="Logger"/>
+    </sub-flow>
+    
+    <!-- 
+   		This flow will be responsible to initialize and assign some default variables.
+   	-->
+    <sub-flow name="DefaultValues_Flow">
+    	<!-- Mule flows - variable initialization reading from properties file -->
+        <set-session-variable variableName="RESPONSE_FORMAT" value="${metro.transit.default.response.format}" doc:name="Set Default Response Format" />
+        <set-variable variableName="errorMessage" value="${metro.transit.data.validation.err.msg}" doc:name="Common data validation error "/>
+        <!-- Mule flows - variable initialization -->
+        <set-variable variableName="directionId" value="#['']" doc:name="Initialize Bus Route Variable"/>
+        <set-variable variableName="routeId" value="#['']" doc:name="Initialize Route Variable"/>
+        <set-variable variableName="stopId" value="#['']" doc:name="Initialize Stop Variable"/>
+        <set-variable variableName="response" value="#[new java.util.LinkedHashMap()]" doc:name="Variable" />
+    </sub-flow>
+</mule>
