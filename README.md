@@ -104,6 +104,17 @@ In case of change the existing code, you may require following tools,
 		Reponse:
 			{}
 
+	4. REST API for refresh Routes in Storage: GET http://localhost:9999/Metro/RefereshRoutes
+	
+		Response: After refreshed with Storage, will return back as JSON fromat as below,
+		[
+			{"Description":"METRO Blue Line","ProviderID":"8","Route":"901"},
+			{"Description":"METRO Green Line","ProviderID":"8","Route":"902"},
+			.
+			.
+		]
+	
+
 #### The fine print
 
 Only tested with Mozilla Firefox browsers
