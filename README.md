@@ -48,6 +48,7 @@ In case of change the existing code, you may require following tools,
 
 1. Navigate to the project's root and start your application.
 2. Open any REST client(POSTMan) and pass below,
+
 	1. REST Consumer URI(Reponse will be JSON): http://localhost:9999/Metro/NextBus	Or	http://localhost:9999/Metro/NextBus?format=json
 	
 		Method: POST
@@ -67,14 +68,18 @@ In case of change the existing code, you may require following tools,
 			}
 			
 	2. REST Consumer URI(Reponse will be XML): http://localhost:9999/Metro/NextBus?format=xml
+	
 		Method: POST
+		
 		Content Type: application/json
+		
 		Payload: 
 			{
 				"BUS_ROUTE" : "Brooklyn Ctr - Fremont - 26th Av - Chicago - MOA",
 				"BUS_STOP_NAME" : "44th Ave  and Fremont Ave ",
 				"DIRECTION" : "north"
 			}
+			
 		Reponse:
 			<linked-hash-map>
 				<entry>
@@ -82,15 +87,20 @@ In case of change the existing code, you may require following tools,
 					<string>13 Min</string>
 				</entry>
 			</linked-hash-map>
+			
 	3. REST Consumer URI(No Reponse): http://localhost:9999/Metro/NextBus?format=xml
+	
 		Method: POST
+		
 		Content Type: application/json
+		
 		Payload: 
 			{
 				"BUS_ROUTE" : "METRO Blue Line",
 				"BUS_STOP_NAME" : "Target Field Station Platform 1",
 				"DIRECTION" : "south"
 			}
+			
 		Reponse:
 			{}
 
