@@ -88,7 +88,7 @@ In case of change the existing code, you may require following tools,
 				</entry>
 			</linked-hash-map>
 			
-	3. REST Consumer URI(No Reponse): http://localhost:9999/Metro/NextBus?format=xml
+	3. REST Consumer URI(No Reponse): http://localhost:9999/Metro/NextBus
 	
 		Method: POST
 		
