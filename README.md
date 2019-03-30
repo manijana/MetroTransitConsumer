@@ -44,16 +44,13 @@ In case of change the existing code, you may require following tools,
 	1. REST Consumer URI(Response will be JSON): http://localhost:9999/Metro/NextBus (Or) http://localhost:9999/Metro/NextBus?format=json
 	
 		Method: POST
-		
 		Content Type: application/json
-		
 		Payload: 
 			{
 				"BUS_ROUTE" : "Brooklyn Ctr - Fremont - 26th Av - Chicago - MOA",
 				"BUS_STOP_NAME" : "44th Ave  and Fremont Ave ",
 				"DIRECTION" : "north"
 			}
-			
 		Response:
 			{
 				"NextBus": "13 Min"
@@ -62,18 +59,14 @@ In case of change the existing code, you may require following tools,
 	2. REST Consumer URI(Response will be XML): http://localhost:9999/Metro/NextBus?format=xml
 	
 		Method: POST
-		
 		Content Type: application/json
-		
 		Payload: 
 			{
 				"BUS_ROUTE" : "Brooklyn Ctr - Fremont - 26th Av - Chicago - MOA",
 				"BUS_STOP_NAME" : "44th Ave  and Fremont Ave ",
 				"DIRECTION" : "north"
-			}
-			
+			}	
 		Response:
-			
 			<linked-hash-map>
 				<entry>
 					<string>NextBus</string>
@@ -85,16 +78,13 @@ In case of change the existing code, you may require following tools,
 	3. REST Consumer URI(Empty Response): http://localhost:9999/Metro/NextBus
 	
 		Method: POST
-		
 		Content Type: application/json
-		
 		Payload: 
 			{
 			"BUS_ROUTE" : "METRO Blue Line",
 			"BUS_STOP_NAME" : "Target Field Station Platform 1",
 			"DIRECTION" : "south"
 			}
-			
 		Response:
 			{}
 
